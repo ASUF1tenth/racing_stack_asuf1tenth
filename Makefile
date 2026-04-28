@@ -12,8 +12,7 @@ CACHE_DIR := ../race_stack_cache/humble
 	default_setup_car \
 	setup_cache \
 	build_base \
-	build_sim \
-	build_car \
+	build_full \
 	launch_car \
 	fix_repo_tokens
 
@@ -56,10 +55,10 @@ build_base: ## Build the base workspace
 	fi
 	@echo "Base workspace built successfully."
 
-build_sim: ## Build the race_stack with the simulator
+build_full: ## Build the race_stack with the simulator
 	@echo "Detecting system architecture..."
 	@if [ "$$(uname -m)" = "x86_64" ]; then \
-		echo "Building simulator for x86 architecture..."; \
+		echo "Building for x86 architecture..."; \
 		export HOST_UID=$$(id -u) HOST_GID=$$(id -g); \
 		docker compose build sim_x86; \
 	elif [ "$$(uname -m)" = "aarch64" ]; then \
