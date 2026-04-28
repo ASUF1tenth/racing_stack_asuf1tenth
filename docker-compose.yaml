@@ -32,7 +32,7 @@ x-common-settings: &common-settings
     - USER=${USER}
     - USERNAME=${USER}
     - ROS_LOCALHOST_ONLY=0
-    - ROS_DOMAIN_ID=42
+    - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-48}
     - RCUTILS_COLORIZED_OUTPUT=1
     - TERM=xterm-256color
     - RMW_IMPLEMENTATION=rmw_zenoh_cpp

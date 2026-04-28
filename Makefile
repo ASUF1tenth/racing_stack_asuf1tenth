@@ -24,9 +24,10 @@ help: ## Show available targets and their descriptions
 default_setup: export_env edit-json-arm check-registry setup_cache build ## Setup the race_stack on a new computer, with the simulator
 # LEAF TARGETS
 export_env:
-	@echo "Exporting environment variables to .env file..."\
-	&& echo "HOST_UID=$(shell id -u)" > .env \
-	&& echo "HOST_GID=$(shell id -g)" >> .env
+	@echo "Exporting environment variables to .env file..."
+	@printf "Enter ROS_DOMAIN_ID [48]: " && read domain_id && echo "ROS_DOMAIN_ID=$${domain_id:-48}" > .env
+	@echo "HOST_UID=$(shell id -u)" >> .env
+	@echo "HOST_GID=$(shell id -g)" >> .env
 setup_cache: ## Create cache folder structure
 	@echo "Creating ros cache directories..."
 	mkdir -p $(CACHE_DIR)/build \

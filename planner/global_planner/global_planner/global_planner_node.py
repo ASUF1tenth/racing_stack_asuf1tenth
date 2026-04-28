@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import shutil
 import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
@@ -39,6 +40,15 @@ class GlobalPlanner(Node):
 
         # get map source path
         self.map_dir = get_data_path('maps/' + self.map_name)
+
+        if self.map_name == 'latest':
+            backup_dir = get_data_path('maps/backup')
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
+            if self.map_dir.exists():
+                shutil.move(str(self.map_dir), str(backup_dir))
+                self.get_logger().info("Moved 'latest' map to 'backup'.")
+            self.map_dir.mkdir(parents=True, exist_ok=True)
 
         # use watershed algorithm to find the centerline
         self.watershed = True
