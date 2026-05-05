@@ -1,4 +1,4 @@
-ARG IMAGE=ros:humble-desktop
+ARG IMAGE=ros:humble
 FROM ${IMAGE}
 ARG PLATFORM=arm
 ARG USER

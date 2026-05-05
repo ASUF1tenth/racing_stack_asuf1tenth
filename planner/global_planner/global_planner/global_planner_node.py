@@ -1,172 +1,368 @@
 #!/usr/bin/env python3
 
 import os
-import shutil
+from pathlib import Path
+
+import yaml
+import cv2
+import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from skimage.morphology import skeletonize
+
 import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
-
-from f110_msgs.msg import WpntArray
-from nav_msgs.msg import OccupancyGrid
-from std_msgs.msg import String, Float32
-from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray
+from geometry_msgs.msg import Point
+from std_msgs.msg import Float32
+from f110_msgs.msg import WpntArray
 
-from .global_planner_utils import get_data_path
-from .global_planner_logic import GlobalPlannerLogic
-from .readwrite_global_waypoints import read_global_waypoints
+import trajectory_planning_helpers as tph
+from .readwrite_global_waypoints import write_global_waypoints
+from global_racetrajectory_optimization.trajectory_optimizer import trajectory_optimizer
+from global_racetrajectory_optimization import helper_funcs_glob
+from .global_planner_utils import extract_centerline, \
+    smooth_centerline, \
+    extract_track_bounds, \
+    dist_to_bounds, \
+    add_dist_to_cent, \
+    write_centerline, \
+    publish_track_bounds, \
+    create_wpnts_markers, \
+    compare_direction, \
+    get_data_path
 
 
-class GlobalPlanner(Node):
-    """
-    Global planner node
-    """
-
+class GlobalPlannerNode(Node):
+    """Global planner node"""
+    
     def __init__(self):
         super().__init__('global_planner_node', allow_undeclared_parameters=True,
                          automatically_declare_parameters_from_overrides=True)
 
-        self.rate = self.get_parameter('rate').value
         self.map_name = self.get_parameter('map_name').value
-        self.create_map = self.get_parameter('create_map').value
-        self.map_editor = self.get_parameter('map_editor').value
         self.reverse_mapping = self.get_parameter('reverse_mapping').value
+        self.show_plots = self.get_parameter('show_plots').value
         self.safety_width = self.get_parameter('safety_width').value
         self.safety_width_sp = self.get_parameter('safety_width_sp').value
-        self.occupancy_grid_threshold = self.get_parameter('occupancy_grid_threshold').value
-        self.filter_kernel_size = self.get_parameter('filter_kernel_size').value
-        self.show_plots = self.get_parameter('show_plots').value
-        self.required_laps = self.get_parameter('required_laps').value
 
-        # get map source path
-        self.map_dir = get_data_path('maps/' + self.map_name)
-        # use watershed algorithm to find the centerline
+        
+        self.map_resolution = None
         self.watershed = True
-
-        self.logic = GlobalPlannerLogic(
-            self.safety_width,
-            self.safety_width_sp,
-            self.occupancy_grid_threshold,
-            self.map_editor,
-            self.create_map,
-            self.map_name,
-            self.map_dir,
-            get_data_path('maps/backup'),
-            get_data_path('scripts/finish_map.sh'),
-            os.path.join(get_package_share_directory('stack_master'), 'config', 'global_planner'),
-            self.show_plots,
-            self.filter_kernel_size,
-            self.required_laps,
-            self.reverse_mapping,
-            self.get_logger().info,
-            self.get_logger().warn,
-            self.get_logger().error
-        )
-
-        # Subscribers
-        self.create_subscription(OccupancyGrid, '/map', self.map_cb, 10)
-        self.create_subscription(PoseStamped, '/car_state/pose', self.pose_cb, 10)
-        self.get_logger().info("Waiting for map and car pose...")
-
-        # Publishers
-        # For the local planner
+        self.map_info_str = ""
+        self.input_path = os.path.join(get_package_share_directory('stack_master'), 'config', 'global_planner')
+        
         self.global_waypoints_pub = self.create_publisher(WpntArray, '/global_waypoints', 10)
-        self.centerline_waypoints_pub = self.create_publisher(WpntArray, '/centerline_waypoints', 10)
-        # For visualization
+        self.global_waypoints_sp_pub = self.create_publisher(WpntArray, '/global_waypoints/shortest_path', 10)
         self.global_waypoints_markers_pub = self.create_publisher(MarkerArray, '/global_waypoints/markers', 10)
         self.centerline_waypoints_markers_pub = self.create_publisher(MarkerArray, '/centerline_waypoints/markers', 10)
         self.track_bounds_pub = self.create_publisher(MarkerArray, '/trackbounds/markers', 10)
-        # For the shortest path
-        self.shortest_path_waypoints_pub = self.create_publisher(WpntArray, '/global_waypoints/shortest_path', 10)
         self.shortest_path_waypoints_markers_pub = self.create_publisher(
             MarkerArray, '/global_waypoints/shortest_path/markers', 10)
-        # Map infos
-        self.map_infos_pub = self.create_publisher(String, '/map_infos', 10)
-        # Estimated lap time (for l1_param_optimizer)
-        self.est_lap_time_pub = self.create_publisher(Float32, '/estimated_lap_time', 10)
+        
+        self.load_and_plot_map()
+    
+    
+    def publish_plan(self,
+                     global_waypoints: WpntArray,
+                     global_waypoints_marker: MarkerArray,
+                     centerline_waypoints_marker: MarkerArray,
+                     global_waypoints_sp: WpntArray,
+                     shortest_path_waypoints_marker: MarkerArray,
+                     track_bounds_marker: MarkerArray
+                     ) -> None:
+        """Publishes the global plan as a MarkerArray message."""
+        
+        self.global_waypoints_markers_pub.publish(global_waypoints_marker)
+        self.centerline_waypoints_markers_pub.publish(centerline_waypoints_marker)
+        self.shortest_path_waypoints_markers_pub.publish(shortest_path_waypoints_marker)
+        self.track_bounds_pub.publish(track_bounds_marker)
+        self.global_waypoints_pub.publish(global_waypoints)
+        self.global_waypoints_sp_pub.publish(global_waypoints_sp)
 
-        # Main loop
-        self.create_timer(1 / self.rate, self.global_plan_callback)
-
-    def map_cb(self, data: OccupancyGrid):
-        """
-        Callback function of /map subscriber.
-
-        Parameters
-        ----------
-        data
-            Data received from /map topic
-        """
-        self.logic.update_map(data)
-
-    def pose_cb(self, data: PoseStamped):
-        """
-        Callback function of /tracked_pose subscriber.
-
-        Parameters
-        ----------
-        data
-            Data received from /tracked_pose topic
-        """
-
-        self.logic.update_pose(data)
-
-    def global_plan_callback(self):
-        # Map name may be renamed from parameter if the map name already exists.
-        # So look for the one returned by the function
+    def load_and_plot_map(self):
+        """Loads the map from disk, applies filtering and plots it."""
+        self.get_logger().info(f"Loading map: {self.map_name}")
+        img_path = os.path.join(get_data_path("maps/" + self.map_name), self.map_name + '.png')
+        self.map_dir = get_data_path('maps/' + self.map_name)
+        self.filtered_map = cv2.flip(cv2.imread(img_path, 0), 0)
+        skeleton = skeletonize(self.filtered_map, method='lee')
+        map_info = yaml.safe_load(open(os.path.join(get_data_path("maps/" + self.map_name), self.map_name + '.yaml'), 'r'))
+        self.map_resolution = map_info['resolution']
+        self.map_origin = Point()
+        self.map_origin.x = map_info['origin'][0]
+        self.map_origin.y = map_info['origin'][1]
+        self.initial_position = map_info['initial_pose']
+        self.skeleton = skeleton
         try:
-            success, map_name = self.logic.global_plan_logic()
-        except OSError as e:
-            self.get_logger().error(f"{e}")
-            self.get_logger().warn("Killing global planner...")
-            self.destroy_node()
-            return
-        if success:
-            self.get_logger().warn(f"Global planner succeeded: {map_name=}")
-            self.read_and_publish(self.map_editor, self.create_map)
-            self.get_logger().info("Killing global planner...")
-            self.destroy_node()
+            f, (ax0, ax1) = plt.subplots(2, 1)
+            f.suptitle(f"Map [{self.map_name}]: Filtered map versus morphological skeleton")
+            ax0.imshow(self.filtered_map, cmap='gray')
+            ax1.imshow(skeleton, cmap='gray')
+            plt.show()
+        except Exception as e:
+            self.get_logger().warn(f"Could not display map plots, error: {e}")
+            
+    def plan(self):
+        """ Main function: Load, Process, Publish """
 
-    def read_and_publish(self, map_editor_mode: bool, create_map: bool) -> None:
-        """Reads infos serialized by the global planner and publishes them, thus decoupling ROS publishing from main logic.
+        self.get_logger().info("Extracting centerline...")
+        centerline = extract_centerline(
+                skeleton=self.skeleton,
+                cent_length=0.0,
+                map_resolution=self.map_resolution)
+        centerline_smooth = smooth_centerline(centerline)
+        centerline_meter = np.zeros(np.shape(centerline_smooth))
+        centerline_meter[:, 0] = centerline_smooth[:, 0] * self.map_resolution + self.map_origin.x
+        centerline_meter[:, 1] = centerline_smooth[:, 1] * self.map_resolution + self.map_origin.y
 
-        Args:
-            map_name (str): eventual map name returned by main logic
-            map_editor_mode (bool): if map editor mode is on
-        """
+        # interpolate centerline to 0.1m stepsize: less computation needed later for distance to track bounds
+        centerline_meter = np.column_stack((centerline_meter, np.zeros((centerline_meter.shape[0], 2))))
 
-        # in map editor mapping mode, just exit (anyway the JSON is not written)
-        if map_editor_mode and create_map:
-            self.get_logger().warn("In map_editor_mapping mode. Waypoints are not calculated, and thus not published.")
-            return
+        centerline_meter_int = helper_funcs_glob.src.interp_track.interp_track(reftrack=centerline_meter,
+                                                                               stepsize_approx=0.1)[:, :2]
 
-        # Read global waypoints and publish
+        # get distance to initial position for every point on centerline
+        cent_distance = np.sqrt(np.power(centerline_meter_int[:, 0] - self.initial_position[0], 2)
+                                + np.power(centerline_meter_int[:, 1] - self.initial_position[1], 2))
+
+        min_dist_ind = np.argmin(cent_distance)
+
+        cent_direction = np.angle([complex(centerline_meter_int[min_dist_ind, 0] -
+                                           centerline_meter_int[min_dist_ind - 1, 0],
+                                           centerline_meter_int[min_dist_ind, 1] -
+                                           centerline_meter_int[min_dist_ind - 1, 1])])
+
+        self.get_logger().info(f"Direction of the centerline: {cent_direction[0]}")
+        if self.show_plots:
+            plt.plot(centerline_meter_int[:, 0], centerline_meter_int[:, 1], 'ko', label='Centerline interpolated')
+            plt.plot(centerline_meter_int[min_dist_ind - 1, 0], centerline_meter_int[min_dist_ind - 1, 1], 'ro',
+                        label='First point')
+            plt.plot(centerline_meter_int[min_dist_ind, 0], centerline_meter_int[min_dist_ind, 1], 'bo',
+                        label='Second point')
+            plt.legend()
+            plt.gca().set_aspect('equal', adjustable='box')
+            plt.grid()
+            plt.show()
+        
+        # flip centerline if directions don't match
+        if not compare_direction(cent_direction, self.initial_position[2]):
+            centerline_smooth = np.flip(centerline_smooth, axis=0)
+            centerline_meter_int = np.flip(centerline_meter_int, axis=0)
+
+        # Flip again if necessary
+        if self.reverse_mapping:
+            centerline_smooth = np.flip(centerline_smooth, axis=0)
+            centerline_meter_int = np.flip(centerline_meter_int, axis=0)
+            self.get_logger().info('Centerline flipped')
+
+        # extract track bounds
         try:
-            map_infos, est_lap_time, centerline_markers, centerline_wpnts, \
-                glb_markers, glb_wpnts, \
-                glb_sp_markers, glb_sp_wpnts, \
-                track_bounds = read_global_waypoints(map_dir=self.map_dir)
-        except FileNotFoundError as e:
-            self.get_logger().error(f"{e}. Not republishing waypoints.")
-            return
+            self.get_logger().info('Using watershed for track bound extraction...')
+            bound_r_water, bound_l_water = extract_track_bounds(centerline_smooth,
+                                                                self.filtered_map,
+                                                                map_resolution=self.map_resolution,
+                                                                map_origin=self.map_origin,
+                                                                initial_position=self.initial_position,
+                                                                show_plots=self.show_plots)
+            dist_transform = None
+        except IOError:
+            self.get_logger().warn('More than two track bounds detected with watershed algorithm')
+            self.get_logger().info('Trying with simple distance transform...')
+            self.watershed = False
+            bound_r_water = None
+            bound_l_water = None
+            dist_transform = cv2.distanceTransform(self.filtered_map, cv2.DIST_L2, 5)
+            
 
-        self.global_waypoints_pub.publish(glb_wpnts)
-        self.centerline_waypoints_pub.publish(centerline_wpnts)
-        self.centerline_waypoints_markers_pub.publish(centerline_markers)
-        self.global_waypoints_markers_pub.publish(glb_markers)
-        self.track_bounds_pub.publish(track_bounds)
-        self.shortest_path_waypoints_pub.publish(glb_sp_wpnts)
-        self.shortest_path_waypoints_markers_pub.publish(glb_sp_markers)
-        self.map_infos_pub.publish(map_infos)
-        self.est_lap_time_pub.publish(est_lap_time)
+        ################################################################################################################
+        # Compute global trajectory with mincurv_iqp optimization
+        ################################################################################################################
+        track_path_root = os.path.join(Path.home(), ".ros")
+        iqp_centerline_path = os.path.join(track_path_root, 'map_centerline')
+        sp_centerline_path = os.path.join(track_path_root, 'map_centerline_2')
+
+        cent_with_dist = add_dist_to_cent(centerline_smooth=centerline_smooth,
+                                          centerline_meter=centerline_meter_int,
+                                          map_resolution=self.map_resolution,
+                                          safety_width=self.safety_width,
+                                          show_plots=self.show_plots,
+                                          dist_transform=dist_transform,
+                                          bound_r=bound_r_water,
+                                          bound_l=bound_l_water,
+                                          reverse=self.reverse_mapping)
+
+        # Write centerline in a csv file and get a marker array of it
+        centerline_waypoints, centerline_markers = write_centerline(cent_with_dist)
+
+        # Add curvature and angle to centerline waypoints
+        centerline_coords = np.array([
+            [coord.x_m, coord.y_m] for coord in centerline_waypoints.wpnts
+        ])
+
+        psi_centerline, kappa_centerline = tph.calc_head_curv_num.\
+            calc_head_curv_num(
+                path=centerline_coords,
+                el_lengths=0.1 * np.ones(len(centerline_coords) - 1),
+                is_closed=False
+            )
+        for i, (psi, kappa) in enumerate(zip(psi_centerline, kappa_centerline)):
+            centerline_waypoints.wpnts[i].s_m = i * 0.1
+            # pi/2 added because trajectory_planning_helpers package assumes north to be zero psi
+            centerline_waypoints.wpnts[i].psi_rad = psi + np.pi / 2
+            centerline_waypoints.wpnts[i].kappa_radpm = kappa
+
+        self.get_logger().info('Start Global Trajectory optimization with iterative minimum curvature...')
+        try:
+            global_trajectory_iqp, bound_r_iqp, bound_l_iqp, est_t_iqp = trajectory_optimizer(
+                input_path=self.input_path, track_name=iqp_centerline_path, curv_opt_type='mincurv_iqp', safety_width=self.safety_width, plot=(
+                    self.show_plots and not self.map_editor_mode))
+        except RuntimeError as e:
+            self.get_logger().warn(f"Error during iterative minimum curvature optimization, error: {e}")
+            self.get_logger().info('Try again later!')
+            return False
+
+        self.map_info_str += f'IQP estimated lap time: {round(est_t_iqp, 4)}s; '
+        self.map_info_str += f'IQP maximum speed: {round(np.amax(global_trajectory_iqp[:, 5]), 4)}m/s; '
+
+        # do not use bounds of optimizer if the one's from the watershed algorithm are available
+        if self.watershed:
+            bound_r_iqp = bound_r_water
+            bound_l_iqp = bound_l_water
+
+        bounds_markers = publish_track_bounds(bound_r_iqp, bound_l_iqp, reverse=False)
+
+        d_right_iqp, d_left_iqp = dist_to_bounds(trajectory=global_trajectory_iqp,
+                                                 bound_r=bound_r_iqp,
+                                                 bound_l=bound_l_iqp,
+                                                 centerline=centerline_meter_int,
+                                                 safety_width=self.safety_width,
+                                                 show_plots=self.show_plots,
+                                                 reverse=self.reverse_mapping)
+
+        global_traj_wpnts_iqp, global_traj_markers_iqp = _create_wpnts_markers(trajectory=global_trajectory_iqp,
+                                                                                   d_right=d_right_iqp,
+                                                                                   d_left=d_left_iqp,
+                                                                                   loginfo=self.get_logger().info)
+
+        # publish global trajectory markers and waypoints
+        self.get_logger().info('Done with iterative minimum curvature optimization')
+        self.get_logger().info('Lap Completed now publishing global waypoints')
+
+        ################################################################################################################
+        # Compute global trajectory with shortest path optimization
+        ################################################################################################################
+
+        self.get_logger().info('Start reverse Global Trajectory optimization with shortest path...')
+
+        self.get_logger().info('Start Global Trajectory optimization with iterative minimum curvature for overtaking...')
+        global_trajectory_iqp_ot, *_ = trajectory_optimizer(input_path=self.input_path,
+                                                            track_name=iqp_centerline_path,
+                                                            curv_opt_type='mincurv_iqp',
+                                                            safety_width=self.safety_width_sp,
+                                                            plot=(self.show_plots and not self.map_editor_mode))
+
+        # use new iqp path as centerline
+        new_cent_with_dist = add_dist_to_cent(centerline_smooth=global_trajectory_iqp_ot[:, 1:3],
+                                              centerline_meter=global_trajectory_iqp_ot[:, 1:3],
+                                              map_resolution=self.map_resolution,
+                                              safety_width=self.safety_width_sp,
+                                              show_plots=self.show_plots,
+                                              dist_transform=None,
+                                              bound_r=bound_r_water,
+                                              bound_l=bound_l_water,
+                                              reverse=self.reverse_mapping)
+
+        _, new_centerline_markers = write_centerline(new_cent_with_dist, sp_bool=True)
+
+        # to use iqp as new centerline, set trackname='map_centerline_2', otherwise use track_name='map_centerline'
+        # is a bit faster but cuts corner a bit more
+        global_trajectory_sp, bound_r_sp, bound_l_sp, est_t_sp = trajectory_optimizer(
+            input_path=self.input_path, track_name=sp_centerline_path, curv_opt_type='shortest_path', safety_width=self.safety_width_sp, plot=(
+                self.show_plots and not self.map_editor_mode))
+
+        self.est_lap_time = Float32()  # variable which will be published and used in l1_param_optimizer
+        self.est_lap_time.data = est_t_sp
+
+        self.map_info_str += f'SP estimated lap time: {round(est_t_sp, 4)}s; '
+        self.map_info_str += f'SP maximum speed: {round(np.amax(global_trajectory_sp[:, 5]), 4)}m/s; '
+
+        # do not use bounds of optimizer if the one's from the watershed algorithm are available
+        if self.watershed:
+            bound_r_sp = bound_r_water
+            bound_l_sp = bound_l_water
+
+        d_right_sp, d_left_sp = dist_to_bounds(trajectory=global_trajectory_sp,
+                                               bound_r=bound_r_sp,
+                                               bound_l=bound_l_sp,
+                                               centerline=centerline_meter_int,
+                                               safety_width=self.safety_width_sp,
+                                               show_plots=self.show_plots,
+                                               reverse=self.reverse_mapping)
+
+        global_traj_wpnts_sp, global_traj_markers_sp = _create_wpnts_markers(trajectory=global_trajectory_sp,
+                                                                                 d_right=d_right_sp,
+                                                                                 d_left=d_left_sp,
+                                                                                 loginfo=self.get_logger().info,
+                                                                                 second_traj=True)
+
+        # publish global trajectory markers and waypoints
+        self.get_logger().info('Done with shortest path optimization')
+        self.get_logger().info('Lap Completed now publishing shortest path global waypoints')
+        self.publish_plan(global_waypoints=global_traj_wpnts_iqp,
+                          global_waypoints_marker=global_traj_markers_iqp,
+                          centerline_waypoints_marker=centerline_markers,
+                          shortest_path_waypoints_marker=global_traj_markers_sp,
+                            global_waypoints_sp=global_traj_wpnts_sp,
+                          track_bounds_marker=bounds_markers)
+        # Save info into a JSON file
+        write_global_waypoints(
+            self.map_dir,
+            self.map_info_str,
+            self.est_lap_time,
+            centerline_markers,
+            centerline_waypoints,
+            global_traj_markers_iqp,
+            global_traj_wpnts_iqp,
+            global_traj_markers_sp,
+            global_traj_wpnts_sp,
+            bounds_markers
+        )
+
+def _create_wpnts_markers(trajectory: np.ndarray, 
+                        d_right: np.ndarray,
+                        d_left: np.ndarray,
+                        loginfo = lambda x: None,
+                        second_traj: bool = False) -> tuple[WpntArray, MarkerArray]:
+    """
+    Create and return a waypoint array and a marker array.
+
+    Args:
+        trajectory (np.ndarray): A trajectory with waypoints in the form [s_m, x_m, y_m, psi_rad, vx_mps, ax_mps2]
+        d_right (np.ndarray): Distances to the right track bounds for every waypoint in `trajectory`
+        d_left (np.ndarray): Distances to the left track bounds for every waypoint in `trajectory`
+        second_traj (bool, optional): Display second trajectory with a different color than the first.
+                                        Better for visualization. Defaults to False.
+
+    Returns:
+        tuple[WpntArray, MarkerArray]: A waypoint array and a marker array with all points of `trajectory`
+    """
+    max_vx_mps = max(trajectory[:, 5])
+    speed_string = "Max speed: " + str(max_vx_mps)
+    loginfo(speed_string)
+
+    return create_wpnts_markers(trajectory, d_right, d_left, second_traj)
+        
 
 def main(args=None):
     rclpy.init(args=args)
-    planner = GlobalPlanner()
-    rclpy.spin(planner)
-    planner.destroy_node()
+    node = GlobalPlannerNode()
+    node.plan()
+    rclpy.spin_once(node)
+    node.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

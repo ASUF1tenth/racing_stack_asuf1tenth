@@ -7,10 +7,8 @@
 
   <let name="sensors_config" value="$(find-pkg-share stack_master)/config/sensors.yaml" />
   <let name="mux_config" value="$(find-pkg-share stack_master)/config/mux.yaml" />
-  <let name="joy_teleop_config"
-    value="$(find-pkg-share stack_master)/config/$(var racecar_version)/joy_teleop.yaml" />
-  <let name="vesc_config"
-    value="$(find-pkg-share stack_master)/config/$(var racecar_version)/vesc.yaml" />
+  <let name="joy_teleop_config" value="$(find-pkg-share stack_master)/config/$(var racecar_version)/joy_teleop.yaml" />
+  <let name="vesc_config" value="$(find-pkg-share stack_master)/config/$(var racecar_version)/vesc.yaml" />
 
   <!-- Note: This is merely the share path (read-only) as the base_system
     is not expected to modify maps in any way. -->
@@ -22,8 +20,7 @@
       <arg name="map_yaml_path" value="$(var map_path)/$(var map_name).yaml" />
     </include>
     <!-- only needed in sim -->
-    <include
-      file="$(find-pkg-share frenet_odom_republisher)/launch/frenet_odom_republisher_launch.xml" />
+    <include file="$(find-pkg-share frenet_odom_republisher)/launch/frenet_odom_republisher_launch.xml" />
   </group>
 
   <!-- launch real car system -->
