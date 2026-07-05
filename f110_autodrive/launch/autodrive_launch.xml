@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="max_steer_rad" default="0.4189"/>
+  <arg name="Kff_lin" default="0.04"/>
+  <arg name="Kff_quad" default="0.000139"/>
+
+  <node pkg="f110_autodrive" exec="autodrive_adapter" name="autodrive_adapter" output="screen">
+    <param name="max_steer_rad" value="$(var max_steer_rad)"/>
+    <param name="Kff_lin" value="$(var Kff_lin)"/>
+    <param name="Kff_quad" value="$(var Kff_quad)"/>
+  </node>
+</launch>
