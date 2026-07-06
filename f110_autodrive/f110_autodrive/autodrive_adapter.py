@@ -4,6 +4,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
+from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Float32
 
 
@@ -74,6 +75,10 @@ class F110AutoDriveAdapter(Node):
         self.imu_pub_ekf = self.create_publisher(Imu, '/sensors/imu/raw', 10)
         self.imu_pub_ctrl = self.create_publisher(Imu, '/vesc/sensors/imu/raw', 10)
 
+        # Publishers to Autonomy Stack (car state)
+        self.car_state_odom_pub = self.create_publisher(Odometry, '/car_state/odom', 10)
+        self.car_state_pose_pub = self.create_publisher(PoseStamped, '/car_state/pose', 10)
+
         # Publishers to AutoDRIVE
         self.steer_pub = self.create_publisher(Float32, '/autodrive/roboracer_1/steering_command', 10)
         self.throttle_pub = self.create_publisher(Float32, '/autodrive/roboracer_1/throttle_command', 10)
@@ -97,6 +102,15 @@ class F110AutoDriveAdapter(Node):
         msg.header.frame_id = 'odom'
         msg.child_frame_id = 'base_link'
         self.odom_pub.publish(msg)
+
+        # Republish as /car_state/odom for controller speed tracking
+        self.car_state_odom_pub.publish(msg)
+
+        # Extract pose for /car_state/pose
+        pose_msg = PoseStamped()
+        pose_msg.header = msg.header
+        pose_msg.pose = msg.pose.pose
+        self.car_state_pose_pub.publish(pose_msg)
 
     def imu_callback(self, msg: Imu):
         # Forward IMU data with frame_id remapped to 'imu'

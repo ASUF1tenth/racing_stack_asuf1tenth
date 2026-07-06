@@ -2,8 +2,13 @@
 <launch>
   <arg name="racecar_version" default="NUC2" description="'SIM' / 'NUCx'" />
   <arg name="map_name" description="Map name in stack_master/maps" />
-  <arg name="sim" default="False" description="True/False if you want to run simulation" />
+  <arg name="sim_mode" default="none" description="'none' / 'gym' / 'autodrive'" />
+  <arg name="sim" default="False" description="Deprecated: use sim_mode instead. Overrides sim_mode=gym when True." />
   <arg name="loc_algorithm" default="slam" description="'slam' / 'synpf' to switch localisation algorithm" />
+
+  <!-- Resolve effective sim_mode (backward compat with sim flag) -->
+  <let name="_sim_mode" value="$(var sim_mode)" />
+  <let name="_sim_mode" value="gym" if="$(var sim)" />
 
   <let name="sensors_config" value="$(find-pkg-share stack_master)/config/sensors.yaml" />
   <let name="mux_config" value="$(find-pkg-share stack_master)/config/mux.yaml" />
@@ -16,8 +21,8 @@
     is not expected to modify maps in any way. -->
   <let name="map_path" value="$(find-pkg-share stack_master)/maps/$(var map_name)" />
 
-  <!-- launch simulator -->
-  <group if="$(var sim)">
+  <!-- launch GYM simulator -->
+  <group if="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)">
     <include file="$(find-pkg-share f1tenth_gym_ros)/launch/gym_bridge_launch.py">
       <arg name="map_yaml_path" value="$(var map_path)/$(var map_name).yaml" />
     </include>
@@ -26,8 +31,15 @@
       file="$(find-pkg-share frenet_odom_republisher)/launch/frenet_odom_republisher_launch.xml" />
   </group>
 
-  <!-- launch real car system -->
-  <group unless="$(var sim)">
+  <!-- launch AUTODRIVE simulator -->
+  <group if="$(eval &quot;'$(var _sim_mode)' == 'autodrive'&quot;)">
+    <include file="$(find-pkg-share f110_autodrive)/launch/autodrive_launch.xml" />
+    <include
+      file="$(find-pkg-share frenet_odom_republisher)/launch/frenet_odom_republisher_launch.xml" />
+  </group>
+
+  <!-- launch REAL CAR system -->
+  <group unless="$(eval &quot;'$(var _sim_mode)' == 'gym' or '$(var _sim_mode)' == 'autodrive'&quot;)">
     <!-- launch teleop -->
     <include file="$(find-pkg-share f1tenth_stack)/launch/bringup_launch.py">
       <arg name="joy_teleop_config" value="$(var joy_teleop_config)" />
@@ -48,11 +60,12 @@
   <!-- launch global parameter node -->
   <node pkg="stack_master" name="global_parameters" exec="global_parameter_node">
     <param name="racecar_version" value="$(var racecar_version)" />
-    <param name="sim" value="$(var sim)" />
+    <param name="sim_mode" value="$(var _sim_mode)" />
+    <param name="sim" value="$(eval &quot;'$(var _sim_mode)' == 'gym' or '$(var _sim_mode)' == 'autodrive'&quot;)" />
     <param name="map_path" value="$(var map_path)" />
     <!-- Fails with l1 params for some reason
     <param from="$(find-pkg-share stack_master)/config/$(var racecar_version)/l1_params.yaml" /> -->
-    <param name="use_sim_time" value="$(var sim)" />
+    <param name="use_sim_time" value="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)" />
   </node>
 
   <!-- launch global trajectory republisher -->

@@ -39,6 +39,38 @@ Or check out our [video playlist on Youtube](https://www.youtube.com/playlist?li
 
 After installation, the car (or the simulation environment) is ready to be tested. For examples on how to run the different modules on the car, refer to the [`stack_master` README](./stack_master/README.md).
 
+### Simulation Modes
+
+The stack supports three modes controlled by `sim_mode`:
+
+| Mode      | Description                           | launch example                                                     |
+|-----------|---------------------------------------|--------------------------------------------------------------------|
+| `none`    | Physical car (default)                | `ros2 launch stack_master base_system_launch.xml map_name:=levine` |
+| `gym`     | F1TENTH Gym simulator                 | `ros2 launch stack_master base_system_launch.xml sim_mode:=gym`    |
+| `autodrive` | AutoDRIVE RoboRacer simulator       | `ros2 launch stack_master base_system_launch.xml sim_mode:=autodrive` |
+
+For backward compatibility, `sim:=true` maps to `sim_mode:=gym`.
+
+**AutoDRIVE mode** launches the `f110_autodrive` adapter node which bridges AutoDRIVE topics (`/autodrive/roboracer_1/lidar`, `/odom`, `/imu`) to ForzaETH-compatible topics (`/scan`, `/odom`, `/sensors/imu/raw`). It also publishes `/car_state/odom` and `/car_state/pose` directly from the AutoDRIVE ground-truth odometry.
+
+An end-to-end test script is available at [`scripts/test_autodrive_e2e.sh`](./scripts/test_autodrive_e2e.sh):
+
+```bash
+# Full pipeline: AutoDRIVE sim + devkit + stack
+./scripts/test_autodrive_e2e.sh
+
+# Stack only (skip sim/devkit)
+./scripts/test_autodrive_e2e.sh --no-sim --no-devkit
+
+# Force workspace rebuild
+./scripts/test_autodrive_e2e.sh --rebuild
+```
+
+The script orchestrates three Docker containers:
+1. **AutoDRIVE Simulator** (`autodrive_roboracer/sim:latest`) — Unity-based 3D simulation
+2. **Devkit Bridge** (`autodrive_roboracer/devkit:latest`) — Socket.IO to ROS 2 bridge
+3. **ForzaETH Stack** (built from this repo) — race stack with `sim_mode:=autodrive`
+
 ## Contributing
 
 In case you find our package helpful and want to contribute, please either raise an issue or directly make a pull request. To create pull request please follow the guidelines in [CONTRIBUTING](./CONTRIBUTING.md).

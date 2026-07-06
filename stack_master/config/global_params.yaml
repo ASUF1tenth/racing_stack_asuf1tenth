@@ -1,4 +1,5 @@
 stack_master:
   ros__parameters:
     racecar_version: NUC2
-    sim: true
+    sim_mode: none  # 'none' / 'gym' / 'autodrive'
+    sim: false

@@ -2,7 +2,13 @@
 <launch>
     <arg name="racecar_version" default="NUC2" /> <!-- NUCX -->
     <arg name="map_name" description="Name of the map to be created" />
-    <arg name="sim" default="False" />
+    <arg name="sim_mode" default="none" description="'none' / 'gym' / 'autodrive'" />
+    <arg name="sim" default="False" description="Deprecated: use sim_mode instead. Overrides sim_mode=gym when True." />
+
+    <!-- Resolve effective sim_mode (backward compat with sim flag) -->
+    <let name="_sim_mode" value="$(var sim_mode)" />
+    <let name="_sim_mode" value="gym" if="$(var sim)" />
+
     <let name="sensors_config" value="$(find-pkg-share stack_master)/config/sensors.yaml" />
     <let name="mux_config" value="$(find-pkg-share stack_master)/config/mux.yaml" />
     <let name="joy_teleop_config"
@@ -15,7 +21,7 @@
         value="$(find-pkg-prefix stack_master)/../../src/race_stack/stack_master/maps/$(var map_name)" />
 
     <!-- ON PHYSICAL SYSTEM -->
-    <group unless="$(var sim)">
+    <group unless="$(eval &quot;'$(var _sim_mode)' == 'gym' or '$(var _sim_mode)' == 'autodrive'&quot;)">
         <node pkg="global_planner" exec="global_planner" name="global_planner" output="screen">
             <param
                 from="$(find-pkg-share stack_master)/config/global_planner/global_planner_params.yaml" />
@@ -48,8 +54,8 @@
         </node> -->
     </group>
 
-    <!-- ON SIM -->
-    <group if="$(var sim)">
+    <!-- ON GYM SIM -->
+    <group if="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)">
         <node pkg="global_planner" exec="global_planner" name="global_planner" output="screen">
             <param
                 from="$(find-pkg-share stack_master)/config/global_planner/global_planner_params.yaml" />
@@ -61,6 +67,19 @@
         <include file="$(find-pkg-share f1tenth_gym_ros)/launch/gym_bridge_launch.py">
             <arg name="map_yaml_path" value="$(var map_src_path)/$(var map_name).yaml" />
         </include>
+    </group>
+
+    <!-- ON AUTODRIVE SIM -->
+    <group if="$(eval &quot;'$(var _sim_mode)' == 'autodrive'&quot;)">
+        <node pkg="global_planner" exec="global_planner" name="global_planner" output="screen">
+            <param
+                from="$(find-pkg-share stack_master)/config/global_planner/global_planner_params.yaml" />
+            <param name="map_editor" value="True" />
+            <param name="create_map" value="False" />
+            <param name="map_name" value="$(var map_name)" />
+        </node>
+
+        <include file="$(find-pkg-share f110_autodrive)/launch/autodrive_launch.xml" />
     </group>
 
     <!-- Launch Sector Slicer from Utils -->
