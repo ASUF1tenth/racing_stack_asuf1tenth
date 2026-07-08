@@ -1,0 +1,49 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <arg name="racecar_version" default="NUC2" description="'SIM' / 'NUCx'" />
+  <arg name="map_name" description="Name of the map to create / use" />
+  <arg name="sim_mode" default="none" description="'none' / 'gym' / 'autodrive'" />
+  <arg name="sim" default="False" description="Deprecated: use sim_mode instead. Overrides sim_mode=gym when True." />
+
+  <!-- Resolve effective sim_mode (backward compat with sim flag) -->
+  <let name="_sim_mode" value="$(var sim_mode)" />
+  <let name="_sim_mode" value="gym" if="$(var sim)" />
+
+  <!-- REALSENSE + SIM (pass through to mapping_launch.xml) -->
+  <group if="$(eval &quot;'$(var _sim_mode)' == 'none' or '$(var _sim_mode)' == 'gym'&quot;)">
+    <let name="_sim" value="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)" />
+    <include file="$(find-pkg-share stack_master)/launch/mapping_launch.xml">
+      <arg name="racecar_version" value="$(var racecar_version)" />
+      <arg name="map_name" value="$(var map_name)" />
+      <arg name="sim" value="$(_sim)" />
+    </include>
+  </group>
+
+  <!-- AUTODRIVE MAPPING -->
+  <group if="$(eval &quot;'$(var _sim_mode)' == 'autodrive'&quot;)">
+    <!-- global planner with map_editor=true (no pre-built map) -->
+    <node pkg="global_planner" exec="global_planner" name="global_planner" output="screen">
+      <param
+        from="$(find-pkg-share stack_master)/config/global_planner/global_planner_params.yaml" />
+      <param name="map_editor" value="True" />
+      <param name="create_map" value="False" />
+      <param name="map_name" value="$(var map_name)" />
+    </node>
+
+    <!-- autodrive adapter (topic bridge) -->
+    <include file="$(find-pkg-share f110_autodrive)/launch/autodrive_launch.xml" />
+
+    <!-- sector slicer -->
+    <node pkg="sector_tuner" exec="sector_slicer" name="sector_slicer" output="screen">
+      <param name="map_name" value="$(var map_name)" />
+    </node>
+
+    <!-- ot sector slicer -->
+    <node pkg="sector_tuner" exec="ot_sector_slicer" name="ot_sector_slicer" output="screen">
+      <param name="map_name" value="$(var map_name)" />
+    </node>
+
+    <!-- global trajectory republisher -->
+    <node name="global_republisher" pkg="global_planner" exec="global_trajectory_publisher" />
+  </group>
+</launch>

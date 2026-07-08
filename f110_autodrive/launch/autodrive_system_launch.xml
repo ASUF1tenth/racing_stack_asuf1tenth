@@ -1,0 +1,63 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <arg name="racecar_version" default="NUC2" description="'SIM' / 'NUCx'" />
+  <arg name="map_name" description="Map name in stack_master/maps" />
+  <arg name="sim_mode" default="none" description="'none' / 'gym' / 'autodrive'" />
+  <arg name="sim" default="False" description="Deprecated: use sim_mode instead. Overrides sim_mode=gym when True." />
+  <arg name="loc_algorithm" default="slam" description="'slam' / 'synpf' to switch localisation algorithm" />
+
+  <!-- Resolve effective sim_mode (backward compat with sim flag) -->
+  <let name="_sim_mode" value="$(var sim_mode)" />
+  <let name="_sim_mode" value="gym" if="$(var sim)" />
+
+  <!-- REALSENSE + SIM (pass through to base_system_launch.xml) -->
+  <group if="$(eval &quot;'$(var _sim_mode)' == 'none' or '$(var _sim_mode)' == 'gym'&quot;)">
+    <let name="_sim" value="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)" />
+    <include file="$(find-pkg-share stack_master)/launch/base_system_launch.xml">
+      <arg name="racecar_version" value="$(var racecar_version)" />
+      <arg name="map_name" value="$(var map_name)" />
+      <arg name="sim" value="$(_sim)" />
+      <arg name="loc_algorithm" value="$(var loc_algorithm)" />
+    </include>
+  </group>
+
+  <!-- AUTODRIVE SIM -->
+  <group if="$(eval &quot;'$(var _sim_mode)' == 'autodrive'&quot;)">
+    <!-- autodrive adapter (topic bridge) -->
+    <include file="$(find-pkg-share f110_autodrive)/launch/autodrive_launch.xml" />
+
+    <!-- frenet odom republisher -->
+    <include
+      file="$(find-pkg-share frenet_odom_republisher)/launch/frenet_odom_republisher_launch.xml" />
+
+    <!-- global parameter node (sim=true for sim_params.yaml, use_sim_time=false for wall clock) -->
+    <node pkg="stack_master" name="global_parameters" exec="global_parameter_node">
+      <param name="racecar_version" value="$(var racecar_version)" />
+      <param name="sim" value="true" />
+      <param name="map_path"
+        value="$(find-pkg-share stack_master)/maps/$(var map_name)" />
+      <param name="use_sim_time" value="false" />
+    </node>
+
+    <!-- global trajectory republisher -->
+    <node pkg="global_planner" name="global_republisher" exec="global_trajectory_publisher">
+      <param name="map_path"
+        value="$(find-pkg-share stack_master)/maps/$(var map_name)" />
+    </node>
+
+    <!-- sector tuner -->
+    <node pkg="sector_tuner" name="sector_tuner" exec="sector_tuner">
+      <param name="map_name" value="$(var map_name)" />
+      <param from="$(find-pkg-share stack_master)/maps/$(var map_name)/speed_scaling.yaml" />
+    </node>
+
+    <!-- ot sector tuner -->
+    <node pkg="sector_tuner" name="ot_interpolator" exec="ot_interpolator">
+      <param name="map_name" value="$(var map_name)" />
+      <param from="$(find-pkg-share stack_master)/maps/$(var map_name)/ot_sectors.yaml" />
+    </node>
+
+    <!-- lap analyser -->
+    <node pkg="lap_analyser" name="lap_analyser" exec="lap_analyser" output="screen" />
+  </group>
+</launch>

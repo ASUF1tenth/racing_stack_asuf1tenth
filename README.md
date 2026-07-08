@@ -41,13 +41,18 @@ After installation, the car (or the simulation environment) is ready to be teste
 
 ### Simulation Modes
 
-The stack supports three modes controlled by `sim_mode`:
+The stack supports three modes controlled by `sim_mode`.  Use the wrapper launch files in `f110_autodrive` — they leave the original stack files unmodified and simply pass through to them for `none`/`gym` modes.
 
-| Mode      | Description                           | launch example                                                     |
-|-----------|---------------------------------------|--------------------------------------------------------------------|
-| `none`    | Physical car (default)                | `ros2 launch stack_master base_system_launch.xml map_name:=levine` |
-| `gym`     | F1TENTH Gym simulator                 | `ros2 launch stack_master base_system_launch.xml sim_mode:=gym`    |
-| `autodrive` | AutoDRIVE RoboRacer simulator       | `ros2 launch stack_master base_system_launch.xml sim_mode:=autodrive` |
+| Mode      | Description                           | launch example                                                                 |
+|-----------|---------------------------------------|--------------------------------------------------------------------------------|
+| `none`    | Physical car (default)                | `ros2 launch f110_autodrive autodrive_system_launch.xml map_name:=levine`      |
+| `gym`     | F1TENTH Gym simulator                 | `ros2 launch f110_autodrive autodrive_system_launch.xml sim_mode:=gym`         |
+| `autodrive` | AutoDRIVE RoboRacer simulator       | `ros2 launch f110_autodrive autodrive_system_launch.xml sim_mode:=autodrive`   |
+
+For mapping:
+```bash
+ros2 launch f110_autodrive autodrive_mapping_launch.xml sim_mode:=autodrive map_name:=my_track
+```
 
 For backward compatibility, `sim:=true` maps to `sim_mode:=gym`.
 

@@ -249,7 +249,7 @@ start_stack() {
 
 # ─── Launch ─────────────────────────────────────────────────────────
 launch_stack() {
-  step "Launching base_system_launch.xml  sim_mode:=autodrive"
+  step "Launching autodrive_system_launch.xml  sim_mode:=autodrive"
   local name="${CONTAINER_PREFIX}_forzaeth_stack_1"
   local user="${USER:-belal}"
   local logfile="$LOG_DIR/stack_launch.log"
@@ -262,10 +262,9 @@ launch_stack() {
                   cd /home/$user/ws && \
                   source install/setup.bash && \
                   echo '--- stack launch starting ---' && \
-                  ros2 launch stack_master base_system_launch.xml \
+                  ros2 launch f110_autodrive autodrive_system_launch.xml \
                     sim_mode:=autodrive \
-                    map_name:=${MAP_NAME} \
-                    use_sim_time:=false" \
+                    map_name:=${MAP_NAME}" \
     > "$logfile" 2>&1 &
 
   LPID=$!
