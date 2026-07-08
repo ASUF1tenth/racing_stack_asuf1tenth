@@ -11,11 +11,10 @@
 
   <!-- REALSENSE + SIM (pass through to mapping_launch.xml) -->
   <group if="$(eval &quot;'$(var _sim_mode)' == 'none' or '$(var _sim_mode)' == 'gym'&quot;)">
-    <let name="_sim" value="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)" />
     <include file="$(find-pkg-share stack_master)/launch/mapping_launch.xml">
       <arg name="racecar_version" value="$(var racecar_version)" />
       <arg name="map_name" value="$(var map_name)" />
-      <arg name="sim" value="$(_sim)" />
+      <arg name="sim" value="$(eval &quot;'$(var _sim_mode)' == 'gym'&quot;)" />
     </include>
   </group>
 
