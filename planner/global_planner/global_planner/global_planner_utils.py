@@ -22,7 +22,7 @@ def get_data_path(subpath=''):
     return Path(get_package_share_directory('stack_master')).parents[3] / 'src/race_stack/stack_master' / subpath
 
 
-def extract_centerline(skeleton, cent_length: float, map_resolution: float, map_editor_mode: bool) -> np.ndarray:
+def extract_centerline(skeleton, cent_length: float, map_resolution: float) -> np.ndarray:
     """
     Extract the centerline out of the skeletonized binary image.
 
@@ -39,8 +39,6 @@ def extract_centerline(skeleton, cent_length: float, map_resolution: float, map_
         The expected approximate centerline length.
     map_resolution : float
         The resolution of the map in meters per cell.
-    map_editor_mode : bool
-        A flag indicating whether the function is being called in map editor mode.
 
     Returns
     -------
@@ -83,7 +81,7 @@ def extract_centerline(skeleton, cent_length: float, map_resolution: float, map_
         # line length should be around the length of the centerline otherwise keep length infinity
         if np.abs(cent_length / line_length - 1.0) < 0.15:
             line_lengths[i] = line_length
-        elif map_editor_mode or cent_length == 0.0:
+        elif cent_length == 0.0:
             line_lengths[i] = line_length
 
     # take the shortest line
@@ -156,7 +154,6 @@ def smooth_centerline(centerline: np.ndarray) -> np.ndarray:
 def extract_track_bounds(
         centerline: np.ndarray,
         filtered_bw: np.ndarray,
-        map_editor_mode: bool,
         map_resolution: float,
         map_origin: Point,
         initial_position: np.ndarray,
@@ -173,8 +170,6 @@ def extract_track_bounds(
         The centerline of the track (in cells not meters)
     filtered_bw : np.ndarray
         Filtered black and white image of the track
-    map_editor_mode : bool
-        Flag indicating whether the map editor mode is enabled
     map_resolution : float
         Resolution of the map (in meters per cell)
     map_origin : Point
@@ -215,7 +210,7 @@ def extract_track_bounds(
         mask = np.zeros(filtered_bw.shape, dtype="uint8")
         mask[labels == label] = 255
 
-        if show_plots and not map_editor_mode:
+        if show_plots:
             plt.imshow(mask, cmap='gray')
             plt.show()
 
@@ -280,7 +275,7 @@ def extract_track_bounds(
         bound_right = bound_short_meter
         bound_left = bound_long_meter
 
-    if show_plots and not map_editor_mode:
+    if show_plots:
         plt.imshow(cent_img, cmap='gray')
         fig1, ax1 = plt.subplots()
         ax1.plot(bound_right[:, 0], bound_right[:, 1], 'b', label='Right bound')

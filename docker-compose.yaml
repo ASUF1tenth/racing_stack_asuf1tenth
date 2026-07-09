@@ -18,7 +18,7 @@ x-common-settings: &common-settings
     - command: source /home/${USER}/ws/src/race_stack/.devcontainer/xauth_setup.sh
   command: tail -f /dev/null
   volumes:
-    - /dev:/dev
+    - /dev:/dev:rw
     - $HOME/.Xauthority:/tmp/.Xauthority
     - /tmp/.X11-unix:/tmp/.X11-unix
     - ./:/home/${USER}/ws/src/race_stack:rw

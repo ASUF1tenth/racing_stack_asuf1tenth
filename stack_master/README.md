@@ -1,8 +1,13 @@
 # Stack Master
 Here is the `stack_master`, it is intended to be the main interface between the user and the PBL ForzaETH F110 system.
 
+### Parameters
+There are two important parameters when running the base system or mapping:
+ - racecar_version: This sets car related parameters such as TFs, lookup tables or Pacejka Parameters. By default this is written to the `.env` file in the installation progress.
+ - map_name: This is the name of the map that you want to use / create. Every map is saved in `stack_master/maps/MAP_NAME/`. However, by default a map called `latest` is used.
+
 ### Mapping (on the real car)
-Run the mapping launch file, specifying the map name and the NUCX version:
+Run the mapping launch file:
 ```shell
 ros2 launch stack_master mapping_launch.xml map_name:=<map name of choice>
 ```

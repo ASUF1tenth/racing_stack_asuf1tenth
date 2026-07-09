@@ -1,6 +1,6 @@
 joy:
   ros__parameters:
-    #device_name: /dev/input/js0
+    device_name: /dev/input/joystick-ps5
     device_id: 0
     deadzone: 0.01
     autorepeat_rate: 20.0
