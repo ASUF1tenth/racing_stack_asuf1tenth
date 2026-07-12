@@ -1,32 +1,33 @@
 <?xml version="1.0"?>
 <launch>
   <!-- Launch configuration arguments -->
-  <arg name="racecar_version" default="NUC2"/>
-  <arg name="LU_table" default="NUC2_hangar_pacejka"/>
-  <arg name="controller_mode" default="FTG"/>
-  <arg name="mapping" default="False"/>
-  <arg name="map_name" default="GLC_smile_small"/>
+  <arg name="racecar_version" default="NUC2" />
+  <arg name="LU_table" default="NUC2_hangar_pacejka" />
+  <arg name="controller_mode" default="FTG" />
+  <arg name="mapping" default="False" />
+  <arg name="map_name" default="GLC_smile_small" />
+  <arg name="launch_bridge" default="True" />
 
-  <let name="map_path" value="$(find-pkg-share stack_master)/maps/$(var map_name)"/>
+  <let name="map_path" value="$(find-pkg-share stack_master)/maps/$(var map_name)" />
 
   <!-- 1. Include the AutoDRIVE simulator adapter launch -->
   <include file="$(find-pkg-share f110_autodrive)/launch/autodrive_launch.xml">
     <!-- By default, keep PID feedback zeroed to use pure calibrated feedforward -->
-    <arg name="K_p" value="0.0"/>
-    <arg name="K_i" value="0.0"/>
-    <arg name="K_d" value="0.0"/>
+    <arg name="K_p" value="0.0" />
+    <arg name="K_i" value="0.0" />
+    <arg name="K_d" value="0.0" />
   </include>
 
-  <!-- 2. Launch the ROS state machine node directly with extra parameters for FTG -->
-  <node pkg="state_machine" name="state_machine" exec="state_machine" output="screen">
-    <param from="$(find-pkg-share stack_master)/config/state_machine_params.yaml"/>
-    <param name="mode" value="timetrials"/>
-    <param name="debug" value="False"/>
-    <param name="safety_radius" value="15"/>
-    <param name="max_lidar_dist" value="10.0"/>
-    <param name="max_speed" value="3.0"/>
-    <param name="range_offset" value="180"/>
-    <param name="track_width" value="3.0"/>
+  <!-- 2. Launch the ROS state machine node wrapper with spin_once patch -->
+  <node pkg="f110_autodrive" name="state_machine" exec="autodrive_state_machine" output="screen" launch-prefix="bash -c 'sleep 1.0; $0 $@' ">
+    <param from="$(find-pkg-share stack_master)/config/state_machine_params.yaml" />
+    <param name="mode" value="timetrials" />
+    <param name="debug" value="False" />
+    <param name="safety_radius" value="15" />
+    <param name="max_lidar_dist" value="10.0" />
+    <param name="max_speed" value="3.0" />
+    <param name="range_offset" value="180" />
+    <param name="track_width" value="3.0" />
   </node>
 
   <!-- 3. Launch global parameters node -->
@@ -38,12 +39,16 @@
   </node>
 
   <!-- 4. Launch the controller node wrapper in FTG mode with necessary overrides -->
-  <node pkg="f110_autodrive" name="controller" exec="autodrive_controller" output="screen">
-    <param name="mode" value="$(var controller_mode)"/>
-    <param name="LU_table" value="$(var LU_table)"/>
-    <param name="mapping" value="$(var mapping)"/>
+  <node pkg="f110_autodrive" name="controller" exec="autodrive_controller" output="screen" launch-prefix="bash -c 'sleep 2.0; $0 $@' ">
+    <param name="mode" value="$(var controller_mode)" />
+    <param name="LU_table" value="$(var LU_table)" />
+    <param name="mapping" value="$(var mapping)" />
   </node>
 
   <!-- 5. Launch the dummy publisher node to satisfy startup checks -->
-  <node pkg="f110_autodrive" exec="dummy_publisher" name="dummy_publisher" output="screen"/>
+  <node pkg="f110_autodrive" exec="dummy_publisher" name="dummy_publisher" output="screen" />
+
+  <!-- 6. Launch the AutoDRIVE Devkit simulator bridge node -->
+  <!-- <node pkg="autodrive_roboracer" exec="autodrive_bridge" name="autodrive_bridge"
+  output="screen" if="$(var launch_bridge)"/> -->
 </launch>

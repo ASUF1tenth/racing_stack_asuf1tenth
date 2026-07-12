@@ -1,0 +1,17 @@
+# AutoDRIVE Devkit Python 3.12 dependencies for ROS 2 Jazzy (Ubuntu 24.04)
+# Unpinned or updated versions to support Python 3.12 compilation and runtime.
+
+gevent>=23.9.1
+greenlet>=3.0.0
+gevent-websocket>=0.10.1
+Flask>=3.0.0
+Flask-SocketIO>=5.3.0
+python-socketio>=5.11.0
+python-engineio>=4.9.0
+Jinja2>=3.1.0
+itsdangerous>=2.1.0
+werkzeug>=3.0.0
+numpy>=1.26.0
+pillow>=10.0.0
+opencv-contrib-python>=4.8.0.0
+transforms3d>=0.4.1

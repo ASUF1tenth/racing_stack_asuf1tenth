@@ -2,7 +2,18 @@
 import sys
 import os
 import yaml
+import rclpy
 from ament_index_python.packages import get_package_share_directory
+
+# Monkey-patch rclpy.spin_once to prevent indefinite blocking in wait_for_messages
+original_spin_once = rclpy.spin_once
+
+def patched_spin_once(node, *, executor=None, timeout_sec=None):
+    if timeout_sec is None:
+        timeout_sec = 0.1
+    return original_spin_once(node, executor=executor, timeout_sec=timeout_sec)
+
+rclpy.spin_once = patched_spin_once
 
 # Import the original controller module
 import controller.controller_manager as cm

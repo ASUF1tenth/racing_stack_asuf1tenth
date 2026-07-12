@@ -6,7 +6,7 @@ This package contains the ROS 2 integration, launch configurations, and actuator
 
 ## Features & Work Accomplished
 
-We have implemented two major components in this package:
+We have implemented three major components in this package:
 
 ### 1. Actuator Feedback & Steering Compensation (`autodrive_adapter`)
 To enable stable closed-loop speed tracking under different driving scenarios, the adapter node bridges simulator actuators with the following features:
@@ -23,30 +23,44 @@ Consolidates the modular autonomy stack to run the Follow-the-Gap local planner 
 * **Node Wrapper (`autodrive_controller`)**: Monkey patches the core stack's `controller_manager` at runtime to initialize `self.l1_params` in FTG mode and delay execution until the first `/scan` message arrives, avoiding startup crashes without modifying stack files.
 * **Wall Time Compatibility**: Configures `use_sim_time` to `False` since the AutoDRIVE simulator runs on system time (no `/clock` topic).
 
+### 3. Integrated Simulator Bridge (`autodrive_roboracer`)
+We moved the `autodrive_roboracer` package from the external `autodrive_devkit` workspace directly into our main source workspace.
+* **WSL & Windows Friendly**: Running the bridge inside the same container as the ROS stack bypasses sequence size and network serialization errors across container boundaries, allowing it to communicate with the simulator running on the Windows host over TCP WebSockets.
+* **Unified Launcher**: Added a `launch_bridge` option (enabled by default) to start the WebSocket bridge automatically alongside all other stack nodes in a single command.
+
 ---
 
 ## System Architecture
 
 ```mermaid
 graph TD
-    subgraph Unity Simulator
+    subgraph "Unity Simulator (Host OS)"
         Sim[AutoDRIVE Simulator]
     end
 
-    subgraph f110_autodrive Package
-        Adapter[autodrive_adapter]
-        DummyPub[dummy_publisher]
-        Wrapper[autodrive_controller wrapper]
+    subgraph ROS 2 Docker Container
+        subgraph f110_autodrive Package
+            Adapter[autodrive_adapter]
+            DummyPub[dummy_publisher]
+            Wrapper[autodrive_controller wrapper]
+        end
+
+        subgraph autodrive_roboracer Package
+            Bridge[autodrive_bridge]
+        end
+
+        subgraph Core Autonomy Stack
+            SM[state_machine node]
+            GlobalParam[global_parameters]
+        end
     end
 
-    subgraph Core Autonomy Stack
-        SM[state_machine node]
-        GlobalParam[global_parameters]
-    end
-
-    %% Sensor Data Flow
-    Sim -->|/autodrive/roboracer_1/lidar| Wrapper
-    Sim -->|/autodrive/roboracer_1/odom| Adapter
+    %% Sensor Data Flow (WebSocket to Container)
+    Sim <-->|WebSockets| Bridge
+    
+    %% Sensor remapping within container
+    Bridge -->|/scan| Wrapper
+    Bridge -->|/odom| Adapter
     
     %% Mock Data Flow
     DummyPub -->|/global_waypoints| Wrapper
@@ -61,7 +75,7 @@ graph TD
 
     %% Actuation Commands
     Wrapper -->|/vesc/high_level/ackermann_cmd_mux/input/nav_1| Adapter
-    Adapter -->|/autodrive/roboracer_1/steering and throttle| Sim
+    Adapter -->|/vesc/high_level/ackermann_cmd_mux/input/nav_1| Bridge
 ```
 
 ---
@@ -80,9 +94,6 @@ Passed to the state machine node block:
 
 ### Control Adapter Parameters
 Passed to the adapter node block (can be set to non-zero values to tune closed-loop feedback):
-* `max_steer_rad` (default `0.4189`): Maximum steering angle in radians.
-* `Kff_lin` (default `0.04`): Linear feedforward throttle gain.
-* `Kff_quad` (default `0.000139`): Quadratic feedforward throttle gain.
 * `K_steer` (default `0.15`): Cornering drag compensation gain.
 * `K_p` (default `0.0`): Proportional speed error gain.
 * `K_i` (default `0.0`): Integral speed error gain.
@@ -91,14 +102,17 @@ Passed to the adapter node block (can be set to non-zero values to tune closed-l
 * `I_max` (default `0.2`): Integral windup boundary limit.
 * `alpha` (default `0.25`): First-order low-pass filter coefficient for derivative damping.
 
+### Bridge Options
+* `launch_bridge` (default `True`): Launches the simulator WebSocket bridge. Set to `False` if you prefer to run it manually or externally.
+
 ---
 
 ## How to Run
 
-1. Start the AutoDRIVE Unity simulator.
-2. Build and source your workspace:
+1. Start the AutoDRIVE Unity simulator on your host OS.
+2. Build and source your workspace (inside the container):
    ```bash
-   colcon build --symlink-install --packages-select f110_autodrive
+   colcon build --symlink-install --packages-select f110_autodrive autodrive_roboracer
    source install/setup.bash
    ```
 3. Run the unified autopilot launcher:

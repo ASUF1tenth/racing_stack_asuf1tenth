@@ -47,9 +47,9 @@ class DummyPublisher(Node):
         # Waypoint 2
         dummy_wpnt2 = Wpnt()
         dummy_wpnt2.id = 1
-        dummy_wpnt2.s_m = 100.0
+        dummy_wpnt2.s_m = 50.0
         dummy_wpnt2.d_m = 0.0
-        dummy_wpnt2.x_m = 100.0
+        dummy_wpnt2.x_m = 50.0
         dummy_wpnt2.y_m = 0.0
         dummy_wpnt2.d_right = 1.5
         dummy_wpnt2.d_left = 1.5
@@ -58,6 +58,21 @@ class DummyPublisher(Node):
         dummy_wpnt2.vx_mps = 1.5
         dummy_wpnt2.ax_mps2 = 0.0
         wpnt_array.wpnts.append(dummy_wpnt2)
+
+        # Waypoint 3
+        dummy_wpnt3 = Wpnt()
+        dummy_wpnt3.id = 2
+        dummy_wpnt3.s_m = 100.0
+        dummy_wpnt3.d_m = 0.0
+        dummy_wpnt3.x_m = 100.0
+        dummy_wpnt3.y_m = 0.0
+        dummy_wpnt3.d_right = 1.5
+        dummy_wpnt3.d_left = 1.5
+        dummy_wpnt3.psi_rad = 0.0
+        dummy_wpnt3.kappa_radpm = 0.0
+        dummy_wpnt3.vx_mps = 1.5
+        dummy_wpnt3.ax_mps2 = 0.0
+        wpnt_array.wpnts.append(dummy_wpnt3)
 
         # Publish waypoints
         self.global_wp_pub.publish(wpnt_array)
