@@ -17,7 +17,7 @@ A ROS resourcing will be needed from here on.
 
 ### Base System
 ```shell
-ros2 launch stack_master base_system_launch.xml map_name:=<name of mapped track> sim:=<true/fasle> racecar_version:=<NUCX used>
+ros2 launch stack_master base_system_launch.xml map_name:=<name of mapped track> sim:=<true/false> racecar_version:=<NUCX used>
 ```
   - `<name of mapped track>` is the name of the track you want to run on. It must belong to the list of maps available in the `stack_master/maps` folder.
   - `<true/false>` is a boolean value that indicates if you want to run the simulation or the real car. 
@@ -39,3 +39,30 @@ ros2 launch stack_master head_to_head_launch.xml racecar_version:=<NUCx used> LU
 - `<Look-Up Table name>` is the name of the Look-Up Table you want to use. It must belong to the list of Look-Up Tables available in the `systm_identification/steering_lookup/cfg` folder.
 - `<control algorithm>` is the control algorithm you want to use. Current possibilities are MAP / PP.
 - `<overtake_mode>` is the mode you want to use for overtaking. `spliner` is the only current possibility.
+
+## Running the Spliners
+
+Predictive spliner (direct package launch):
+
+```bash
+source /home/mohany/ws/install/setup.bash
+ros2 launch predictive_spliner predictive_spliner_launch.xml
+```
+
+Predictive spliner (via head-to-head integration):
+
+```bash
+source /home/mohany/ws/install/setup.bash
+ros2 launch stack_master head_to_head_launch.xml racecar_version:=SIM LU_table:=SIM_linear ctrl_algo:=MAP overtake_mode:=predictive_spliner
+```
+
+Default spliner (existing spliner mode via head-to-head):
+
+```bash
+source /home/mohany/ws/install/setup.bash
+ros2 launch stack_master head_to_head_launch.xml racecar_version:=SIM LU_table:=SIM_linear ctrl_algo:=MAP overtake_mode:=spliner
+```
+
+Notes:
+- Ensure you run `colcon build` from the workspace root and then `source /home/mohany/ws/install/setup.bash` so launch files and package shares are available.
+- `LU_table` must match a CSV file present in the `steering_lookup` package share (e.g. `SIM_linear`).
