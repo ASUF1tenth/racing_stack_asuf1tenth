@@ -25,44 +25,10 @@ from rcl_interfaces.msg import ParameterValue, ParameterType, ParameterDescripto
 from tf_transformations import quaternion_from_euler
 from stack_master.parameter_event_handler import ParameterEventHandler
 
+from pbl_config import get_remote_parameter
+
 from typing import List, Dict, Union
 
-# This could be external utils functions
-def return_param_value(p: ParameterValue) -> Union[None, bool, int, str, float, List]:
-    """Returns the value of the parameter based on the parameter type.
-
-    Args:
-        p (ParameterValue): Input ParameterValue object
-
-    Raises:
-        TypeError: If p.type is not in the enumerated values defined by ParameterType
-
-    Returns:
-        Union[None, bool, int, str, float, List]: The relevant value of the parameter.
-    """
-    if p.type == ParameterType.PARAMETER_NOT_SET:
-        return None
-    elif p.type == ParameterType.PARAMETER_BOOL:
-        return p.bool_value
-    elif p.type == ParameterType.PARAMETER_INTEGER:
-        return p.integer_value
-    elif p.type == ParameterType.PARAMETER_DOUBLE:
-        return p.double_value
-    elif p.type == ParameterType.PARAMETER_STRING:
-        return p.string_value
-    elif p.type == ParameterType.PARAMETER_BYTE_ARRAY:
-        return p.byte_array_value
-    elif p.type == ParameterType.PARAMETER_BOOL_ARRAY:
-        return p.bool_array_value
-    elif p.type == ParameterType.PARAMETER_INTEGER_ARRAY:
-        return p.integer_array_value
-    elif p.type == ParameterType.PARAMETER_DOUBLE_ARRAY:
-        return p.double_array_value
-    elif p.type == ParameterType.PARAMETER_STRING_ARRAY:
-        return p.string_array_value
-    else:
-        raise TypeError(
-            f"Parameter has unexpected {p.type=}, the highest expected number is 9. Check rclpy docs.")
 
 class Controller(Node):
     def __init__(self):
@@ -70,16 +36,12 @@ class Controller(Node):
                          allow_undeclared_parameters=True,
                          automatically_declare_parameters_from_overrides=True)
 
-        self.type_arr = ["not_set", "bool_value", "integer_value", "double_value", "string_value",
-                         "byte_array_value", "bool_array_value", "integer_array_value",
-                         "double_array_value", "string_array_value"]
-
 
         # remote parameters
-        self.map_path = self.get_remote_parameter('global_parameters', 'map_path')
-        self.racecar_version = self.get_remote_parameter('global_parameters', 'racecar_version')
-        self.sim = self.get_remote_parameter('global_parameters', 'sim')
-        self.state_machine_rate = self.get_remote_parameter('state_machine', 'rate_hz')
+        self.map_path = get_remote_parameter(self, 'global_parameters', 'map_path')
+        self.racecar_version = get_remote_parameter(self, 'global_parameters', 'racecar_version')
+        self.sim = get_remote_parameter(self, 'global_parameters', 'sim')
+        self.state_machine_rate = get_remote_parameter(self, 'state_machine', 'rate_hz')
 
         # variables
         self.rate = 40
