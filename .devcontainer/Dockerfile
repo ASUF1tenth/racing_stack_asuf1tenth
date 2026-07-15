@@ -30,6 +30,8 @@ RUN if [[ "$(uname -m)" == "aarch64" ]] && [[ "$PLATFORM" == "jet" ]]; then \
 SHELL [ "/bin/bash", "-c" ]
 ARG DEBIAN_FRONTEND=noninteractive
 
+ADD ./.install_utils/basalt_ros_setup.sh /.install_utils/basalt_ros_setup.sh
+RUN chmod +x /.install_utils/basalt_ros_setup.sh && /.install_utils/basalt_ros_setup.sh
 ADD ./.install_utils/linux_req/linux_req.txt /.install_utils/linux_req.txt
 RUN apt-get update && xargs apt-get install -y < /.install_utils/linux_req.txt
 ADD ./.install_utils/python_req.txt /tmp/.install_utils/python_req.txt
@@ -50,6 +52,6 @@ USER root
 # Clean up
 RUN rm -rf /tmp/.install_utils
 
-USER $USER
+# USER $USER
 WORKDIR /home/$USER/ws
 CMD ["/bin/bash"]
